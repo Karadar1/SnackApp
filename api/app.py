@@ -1,5 +1,6 @@
 from flask import Flask
 from dotenv import load_dotenv
+load_dotenv()
 from config import Config
 from models import db
 from models.association import recipe_category
@@ -9,7 +10,6 @@ from models.recipe import Recipe
 
 
 
-load_dotenv()
 app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)

@@ -13,11 +13,14 @@ def getAllRecipes():
             ingredints = []
             for ingr in row["Ingredients"]:
                 ingredient_matches = ingredient_regex.match(ingr)
-                ingredints.append({
-                    "quantity": ingredient_matches["quantity"],
-                    "unit": ingredient_matches["unit"],
-                    "name": ingredient_matches["name"],
-                })
+                try:
+                    ingredints.append({
+                        "quantity": float(ingredient_matches["quantity"]),
+                        "unit": ingredient_matches["unit"],
+                        "name": ingredient_matches["name"],
+                    })
+                except ValueError:
+                    print("That's not a float number")
             row["Ingredients"] = ingredints
             all_recipes.append(row)
             json.dump(all_recipes, jsonfile)

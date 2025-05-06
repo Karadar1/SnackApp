@@ -1,4 +1,5 @@
-from flask import Flask,jsonify,request
+from flask import Flask,jsonify,request,abort
+
 from dotenv import load_dotenv
 load_dotenv()
 from config import Config
@@ -7,6 +8,8 @@ from models.association import recipe_category
 from models.category import Category
 from models.ingredient import Ingredient
 from models.recipe import Recipe
+from sqlalchemy.orm import joinedload
+
 
 
 
@@ -15,197 +18,127 @@ app.config.from_object(Config)
 db.init_app(app)
 
 
-recipes = [
-    {
-        "id": 1,
-        "recipe name": "Chocolate Chip Cookies",
-        "duration": "30 minutes",
-        "pictures": [
-            "https://handletheheat.com/wp-content/uploads/2020/10/BAKERY-STYLE-CHOCOLATE-CHIP-COOKIES-9-637x637-1.jpg"
-        ],
-        "instructions": "Preheat oven to 180\u00b0C. Mix butter and sugar, add eggs and vanilla, then fold in flour, baking soda, and chocolate chips. Scoop onto a baking sheet and bake for 12-15 minutes.",
-        "categories": [
-            "Cookies",
-            "Baking"
-        ],
-        "ingredients": [
-            {
-                "quantity": "250",
-                "unit": "g",
-                "name": "all-purpose flour"
-            },
-            {
-                "quantity": "125",
-                "unit": "g",
-                "name": "butter"
-            },
-            {
-                "quantity": "100",
-                "unit": "g",
-                "name": "sugar"
-            },
-            {
-                "quantity": "1",
-                "unit": None,
-                "name": "egg"
-            },
-            {
-                "quantity": "5",
-                "unit": "g",
-                "name": "vanilla extract"
-            },
-            {
-                "quantity": "3",
-                "unit": "g",
-                "name": "baking soda"
-            },
-            {
-                "quantity": "150",
-                "unit": "g",
-                "name": "chocolate chips"
-            }
-        ]
-    },
-    {
-        "id": 2,
-        "recipe name": "Tiramisu",
-        "duration": "4 hours",
-        "pictures": [
-            "https://staticcookist.akamaized.net/wp-content/uploads/sites/22/2024/09/THUMB-VIDEO-2_rev1-56.jpeg",
-            "https://retete.unica.ro/wp-content/uploads/2010/07/tiramisu-pas-cu-pas1.jpg"
-        ],
-        "instructions": "Mix mascarpone, sugar, and egg yolks. Dip ladyfingers in coffee and layer with mascarpone mixture. Repeat and top with cocoa powder. Refrigerate for at least 4 hours before serving.",
-        "categories": [
-            "Italian",
-            "No-bake"
-        ],
-        "ingredients": [
-            {
-                "quantity": "250",
-                "unit": "g",
-                "name": "mascarpone cheese"
-            },
-            {
-                "quantity": "100",
-                "unit": "g",
-                "name": "sugar"
-            },
-            {
-                "quantity": "3",
-                "unit": None,
-                "name": "egg yolks"
-            },
-            {
-                "quantity": "200",
-                "unit": "g",
-                "name": "ladyfingers"
-            },
-            {
-                "quantity": "300",
-                "unit": "ml",
-                "name": "brewed coffee"
-            },
-            {
-                "quantity": "20",
-                "unit": "g",
-                "name": "cocoa powder"
-            }
-        ]
-    },
-    {
-        "id": 3,
-        "recipe name": "Apple Pie",
-        "duration": "1.5 hours",
-        "pictures": [
-            "https://www.southernliving.com/thmb/bbDY1d_ySIrCFcq8WNBkR-3x6pU=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/2589601_Mailb_Mailbox_Apple_Pie_003-da802ff7a8984b2fa9aa0535997ab246.jpg"
-        ],
-        "instructions": "Prepare a pastry dough and chill. Slice apples and mix with sugar, cinnamon, and lemon juice. Roll out dough, fill with apples, cover with top crust, and bake at 190\u00b0C for 45 minutes.",
-        "categories": [
-            "Pie",
-            "Baking"
-        ],
-        "ingredients": [
-            {
-                "quantity": "300",
-                "unit": "g",
-                "name": "all-purpose flour"
-            },
-            {
-                "quantity": "150",
-                "unit": "g",
-                "name": "butter"
-            },
-            {
-                "quantity": "50",
-                "unit": "g",
-                "name": "sugar"
-            },
-            {
-                "quantity": "4",
-                "unit": None,
-                "name": "apples"
-            },
-            {
-                "quantity": "50",
-                "unit": "g",
-                "name": "brown sugar"
-            },
-            {
-                "quantity": "5",
-                "unit": "g",
-                "name": "cinnamon"
-            },
-            {
-                "quantity": "10",
-                "unit": "ml",
-                "name": "lemon juice"
-            }
-        ]
-    }
-]
-
-
 @app.route('/')
 def helloWorld():
     return "Welcome to my Snack App"
 
 @app.route('/api/recipes', methods=['GET'])
+# def get_recipes():
+#     # return jsonify(recipes)
+#     recipes = []
+#     for recipe in db.session.query(Recipe).all():
+#
+#         recipes.append(recipe.as_dict())
+#     return jsonify(recipes)
 def get_recipes():
+    recipes = []
+
+    # Use joinedload to preload ingredients and categories
+    all_recipes = db.session.query(Recipe).options(
+        joinedload(Recipe.ingredients),
+        joinedload(Recipe.categories)
+    ).all()
+
+    for recipe in all_recipes:
+        recipe_data = recipe.as_dict()
+
+        # Convert pictures (assumed stored as CSV) into list
+        recipe_data['pictures'] = recipe_data['pictures'].split(',')
+
+        # Add ingredients manually
+        recipe_data['ingredients'] = [
+            {
+                'name': ing.name,
+                'unit': ing.unit,
+                'quantity': str(ing.quantity)
+            } for ing in recipe.ingredients
+        ]
+
+        # Add categories manually
+        recipe_data['categories'] = [cat.name for cat in recipe.categories]
+
+        recipes.append(recipe_data)
+
     return jsonify(recipes)
+
 
 @app.route('/api/recipes/<int:recipe_id>', methods=['GET'] )
 def get_recipe(recipe_id):
-    for recipe in recipes:
-        if recipe['id'] == recipe_id:
-            return jsonify(recipe)
-    return jsonify("There is no recipe with id {}".format(recipe_id))
+    recipe = db.session.query(Recipe).options(
+        joinedload(Recipe.ingredients),
+        joinedload(Recipe.categories)
+    ).filter_by(id=recipe_id).first()
+
+    if recipe is None:
+        abort(404, description="Recipe not found")
+
+    recipe_data = recipe.as_dict()
+    recipe_data['pictures'] = recipe_data['pictures'].split(',')
+
+    recipe_data['ingredients'] = [
+        {
+            'name': ing.name,
+            'unit': ing.unit,
+            'quantity': str(ing.quantity)
+        } for ing in recipe.ingredients
+    ]
+
+    recipe_data['categories'] = [cat.name for cat in recipe.categories]
+
+    return jsonify(recipe_data)
+
 
 @app.route('/api/recipes', methods=['POST'])
 def create_recipe():
-    new_recipe = {
-        "id":len(recipes)+1,
-        "name":request.json.get('name'),
-        "duration":request.json.get('duration'),
-        "pictures":request.json.get('pictures'),
-        "instructions":request.json.get('instructions'),
-        "categories":request.json.get('categories'),
-        "ingredients":request.json.get('ingredients'),
-    }
-    recipes.append(new_recipe)
-    return jsonify(new_recipe),201
+    data = request.get_json()
+    new_recipe = Recipe(
+        name=data['name'],
+        pictures=data['pictures'].split(','),
+        instructions=data['instructions'],
+        duration=data['duration'],
+
+    )
+    db.session.add(new_recipe)
+    db.session.flush()
+    for ing in data['ingredients']:
+        new_ingredient = Ingredient(
+            name=ing['name'],
+            unit=ing['unit'],
+            quantity=ing['quantity'],
+            recipe_id=new_recipe.id,
+
+        )
+        db.session.add(new_ingredient)
+
+    for cat in data['categories']:
+        category = db.session.query(Category).filter_by(name=cat).first()
+        if category is None:
+            category = Category(name=cat,color='default')
+            db.session.add(category)
+            db.session.flush()
+        new_recipe.categories.append(category)
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Recipe created successfully.",
+        "id": new_recipe.id
+    }), 201
 
 @app.route('/api/recipes/<int:recipe_id>', methods=['PUT'])
 def update_recipe(recipe_id):
-    for recipe in recipes:
-        if recipe['id'] == recipe_id:
-            recipe['recipe name'] = name if (name:=request.json.get('recipe name')) else recipe['recipe name']
-            recipe['duration'] = duration if (duration:=request.json.get('duration')) else recipe['duration']
-            recipe['pictures'] = pictures if (pictures:=request.json.get('pictures')) else recipe['pictures']
-            recipe['instructions'] = instructions if (instructions:=request.json.get('instructions')) else recipe['instructions']
-            recipe['categories'] = categories if (categories:=request.json.get('categories')) else recipe['categories']
-            recipe['ingredients'] = ingredients if (ingredients:=request.json.get('ingredients')) else recipe['ingredients']
-            return jsonify(recipe)
-    return jsonify("There is no recipe with id {}".format(recipe_id)),404
+    data = request.get_json()
+
+    # for recipe in recipes:
+    #     if recipe['id'] == recipe_id:
+    #         recipe['recipe name'] = name if (name:=request.json.get('recipe name')) else recipe['recipe name']
+    #         recipe['duration'] = duration if (duration:=request.json.get('duration')) else recipe['duration']
+    #         recipe['pictures'] = pictures if (pictures:=request.json.get('pictures')) else recipe['pictures']
+    #         recipe['instructions'] = instructions if (instructions:=request.json.get('instructions')) else recipe['instructions']
+    #         recipe['categories'] = categories if (categories:=request.json.get('categories')) else recipe['categories']
+    #         recipe['ingredients'] = ingredients if (ingredients:=request.json.get('ingredients')) else recipe['ingredients']
+    #         return jsonify(recipe)
+    # return jsonify("There is no recipe with id {}".format(recipe_id)),404
 
 @app.route('/api/recipes/<int:recipe_id>', methods=['DELETE'])
 def delete_recipe(recipe_id):

@@ -129,6 +129,43 @@ def create_recipe():
 def update_recipe(recipe_id):
     data = request.get_json()
 
+    recipe = db.session.query(Recipe).filter_by(id=recipe_id).first()
+    if not recipe:
+        return jsonify({"error": "Recipe not found"}), 404
+
+    recipe.name = data['name']
+    recipe.instructions = data['instructions']
+    recipe.duration = data['duration']
+
+    pictures = data['pictures']
+    if pictures:
+        recipe.pictures = ','.join(pictures) if isinstance(pictures,list) else pictures
+    if data['instructions']:
+        Ingredient.query.filter_by(recipe_id=recipe_id).delete()
+
+        for ing in data['ingredients']:
+            new_ingredient = Ingredient(
+                name=ing['name'],
+                unit=ing['unit'],
+                quantity=ing['quantity'],
+                recipe_id=recipe.id
+            )
+
+            db.session.add(new_ingredient)
+
+    if data['categories']:
+        recipe.categories.clear()
+        for cat_name in data['categories']:
+            category = db.session.query(Category).filter_by(name=cat_name).first()
+            if not category:
+                category = Category(name=cat_name,color='default')
+                db.session.add(category)
+                db.session.flush()
+            recipe.categories.append(category)
+
+    db.session.commit()
+    return jsonify({"message": "Recipe updated successfully."})
+
     # for recipe in recipes:
     #     if recipe['id'] == recipe_id:
     #         recipe['recipe name'] = name if (name:=request.json.get('recipe name')) else recipe['recipe name']
@@ -142,11 +179,14 @@ def update_recipe(recipe_id):
 
 @app.route('/api/recipes/<int:recipe_id>', methods=['DELETE'])
 def delete_recipe(recipe_id):
-    for recipe in recipes:
-        if recipe['id'] == recipe_id:
-            recipes.remove(recipe)
-            return jsonify({"message": "Recipe {} deleted".format(recipe_id)}),200
-    return jsonify("There is no recipe with id {}".format(recipe_id)),404
+    recipe = db.session.query(Recipe).filter_by(id=recipe_id).first()
+    if not recipe:
+        return jsonify({"error": "Recipe not found"}), 404
+    Ingredient.query.filter_by(recipe_id=recipe.id).delete()
+    recipe.categories.clear()
+    db.session.delete(recipe)
+    db.session.commit()
+    return jsonify({"message": f"Recipe ID {recipe_id} deleted successfully."}), 200
 
 
 if __name__ == '__main__':

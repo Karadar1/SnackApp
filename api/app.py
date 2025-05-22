@@ -1,6 +1,9 @@
 from flask import Flask,jsonify,request,abort
 
 from dotenv import load_dotenv
+
+from import_script import populate_db, get_all_recipes
+
 load_dotenv()
 from config import Config
 from models import db
@@ -42,8 +45,6 @@ def get_recipes():
     for recipe in all_recipes:
         recipe_data = recipe.as_dict()
 
-        # Convert pictures (assumed stored as CSV) into list
-        recipe_data['pictures'] = recipe_data['pictures'].split(',')
 
         # Add ingredients manually
         recipe_data['ingredients'] = [
@@ -70,10 +71,9 @@ def get_recipe(recipe_id):
     ).filter_by(id=recipe_id).first()
 
     if recipe is None:
-        abort(404, description="Recipe not found")
+        return jsonify({'error': 'recipe not found'})
 
     recipe_data = recipe.as_dict()
-    recipe_data['pictures'] = recipe_data['pictures'].split(',')
 
     recipe_data['ingredients'] = [
         {
@@ -91,9 +91,10 @@ def get_recipe(recipe_id):
 @app.route('/api/recipes', methods=['POST'])
 def create_recipe():
     data = request.get_json()
+
     new_recipe = Recipe(
         name=data['name'],
-        pictures=data['pictures'].split(','),
+        pictures=data['pictures'],
         instructions=data['instructions'],
         duration=data['duration'],
 
@@ -113,23 +114,19 @@ def create_recipe():
     for cat in data['categories']:
         category = db.session.query(Category).filter_by(name=cat).first()
         if category is None:
-            category = Category(name=cat,color='default')
-            db.session.add(category)
-            db.session.flush()
+            return jsonify({'error': f'category {cat["name"]} not found'}), 400
         new_recipe.categories.append(category)
 
     db.session.commit()
 
-    return jsonify({
-        "message": "Recipe created successfully.",
-        "id": new_recipe.id
-    }), 201
+    return jsonify(new_recipe), 201
 
 @app.route('/api/recipes/<int:recipe_id>', methods=['PUT'])
 def update_recipe(recipe_id):
     data = request.get_json()
 
     recipe = db.session.query(Recipe).filter_by(id=recipe_id).first()
+    recipe = recipe.as_dict()
     if not recipe:
         return jsonify({"error": "Recipe not found"}), 404
 
@@ -138,8 +135,6 @@ def update_recipe(recipe_id):
     recipe.duration = data['duration']
 
     pictures = data['pictures']
-    if pictures:
-        recipe.pictures = ','.join(pictures) if isinstance(pictures,list) else pictures
     if data['instructions']:
         Ingredient.query.filter_by(recipe_id=recipe_id).delete()
 
@@ -158,13 +153,11 @@ def update_recipe(recipe_id):
         for cat_name in data['categories']:
             category = db.session.query(Category).filter_by(name=cat_name).first()
             if not category:
-                category = Category(name=cat_name,color='default')
-                db.session.add(category)
-                db.session.flush()
+                return jsonify({'error': f'category not found'}), 400
             recipe.categories.append(category)
 
     db.session.commit()
-    return jsonify({"message": "Recipe updated successfully."})
+    return jsonify(recipe),201
 
     # for recipe in recipes:
     #     if recipe['id'] == recipe_id:
@@ -186,12 +179,15 @@ def delete_recipe(recipe_id):
     recipe.categories.clear()
     db.session.delete(recipe)
     db.session.commit()
-    return jsonify({"message": f"Recipe ID {recipe_id} deleted successfully."}), 200
+    return jsonify({"message": f"Recipe ID {recipe_id} deleted successfully."}), 204
 
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        # db.drop_all()
+    # with app.app_context():
+    #     db.drop_all()
+    #     db.create_all()
 
-    app.run(debug=True)
+    # Use the following line if you want to populate the database with sample data
+    # populate_db(get_all_recipes(), app, db)
+
+    app.run(host="0.0.0.0")

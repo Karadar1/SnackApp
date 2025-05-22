@@ -15,4 +15,6 @@ class Recipe(db.Model):
     categories = db.relationship('Category', secondary=recipe_category, backref=db.backref('recipe', lazy='dynamic'))
 
     def as_dict(self):
-        return {col.name: getattr(self, col.name) for col in self.__table__.columns}
+        data = {col.name: getattr(self, col.name) for col in self.__table__.columns}
+        data['pictures'] = self.pictures.split(',') if self.pictures else []
+        return data
